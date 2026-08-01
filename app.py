@@ -6,7 +6,7 @@ import cairosvg
 import shutil
 import os
 import io
-from PIL import Image
+from PIL import Image, ImageDraw
 from streamlit_image_coordinates import streamlit_image_coordinates
 
 st.set_page_config(page_title="Chess Trainer", page_icon="♞", layout="wide")
@@ -15,6 +15,7 @@ ANALYSIS_TIME = 1.0
 REPLY_TIME = 2.0
 BOARD_SIZE = 480
 SQUARE_SIZE = BOARD_SIZE / 8
+LABEL_COLOR = "#3b2a1a"
 
 
 def find_stockfish():
@@ -77,152 +78,3 @@ def format_eval(score):
 
 def _with_queen_promotion(move):
     return chess.Move(move.from_square, move.to_square, promotion=chess.QUEEN)
-
-
-def process_human_move(move):
-    move_number = board.fullmove_number
-    side_played = "Blancs" if board.turn == chess.WHITE else "Noirs"
-
-    with chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH) as engine:
-        info = engine.analyse(board, chess.engine.Limit(time=ANALYSIS_TIME))
-        best_move = info["pv"][0]
-        best_san = board.san(best_move)
-        eval_score = info["score"].white()
-
-        played_san = board.san(move)
-        was_best = (move == best_move)
-
-        board.push(move)
-
-        st.session_state.analysis_log.insert(0, {
-            "num": move_number,
-            "side": side_played,
-            "played": played_san,
-            "best": best_san,
-            "was_best": was_best,
-            "eval": format_eval(eval_score),
-        })
-
-        if not board.is_game_over():
-            result = engine.play(board, chess.engine.Limit(time=REPLY_TIME))
-            board.push(result.move)
-
-
-def pixel_to_square(x, y):
-    """Convertit des coordonnées pixel (0-480) en case d'échiquier (a1..h8)."""
-    file = int(x // SQUARE_SIZE)
-    rank = 7 - int(y // SQUARE_SIZE)
-    file = max(0, min(7, file))
-    rank = max(0, min(7, rank))
-    return chess.square(file, rank)
-
-
-def handle_square_click(square):
-    selected = st.session_state.selected_square
-    clicked_piece = board.piece_at(square)
-
-    if selected is None:
-        if clicked_piece and clicked_piece.color == board.turn:
-            st.session_state.selected_square = square
-        return
-
-    if square == selected:
-        st.session_state.selected_square = None
-        return
-
-    move = chess.Move(selected, square)
-    promo_move = _with_queen_promotion(move)
-
-    if move in board.legal_moves:
-        st.session_state.selected_square = None
-        process_human_move(move)
-        return
-    elif promo_move in board.legal_moves:
-        st.session_state.selected_square = None
-        process_human_move(promo_move)
-        return
-
-    if clicked_piece and clicked_piece.color == board.turn:
-        st.session_state.selected_square = square
-    else:
-        st.session_state.selected_square = None
-
-
-def render_board_image():
-    fill = {}
-    selected = st.session_state.selected_square
-    if selected is not None:
-        fill[selected] = "#d4a01780"
-        for move in board.legal_moves:
-            if move.from_square == selected:
-                fill[move.to_square] = "#4ade8080"
-
-    svg_code = chess.svg.board(
-        board=board,
-        size=BOARD_SIZE,
-        coordinates=False,
-        fill=fill,
-    )
-    png_bytes = cairosvg.svg2png(bytestring=svg_code.encode("utf-8"))
-    return Image.open(io.BytesIO(png_bytes))
-
-
-# --- Mise en page ---
-left_col, right_col = st.columns([1, 2], gap="large")
-
-with left_col:
-    st.markdown("## 🎓 Trainer")
-    st.markdown('<p class="subtitle">Le meilleur coup, à chaque tour</p>', unsafe_allow_html=True)
-
-    if st.session_state.analysis_log:
-        last = st.session_state.analysis_log[0]
-        st.markdown('<div class="analysis-card">', unsafe_allow_html=True)
-        if last["was_best"]:
-            st.success(f"✅ Meilleur coup joué : **{last['played']}**")
-        else:
-            st.warning(f"Toi : **{last['played']}**  \nMeilleur coup : **{last['best']}**")
-        st.caption(f"Évaluation : {last['eval']}")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        with st.expander("📜 Historique des coups"):
-            for entry in st.session_state.analysis_log:
-                icon = "✅" if entry["was_best"] else "🔸"
-                st.write(
-                    f"{icon} {entry['num']}. ({entry['side']}) "
-                    f"joué: {entry['played']} — meilleur: {entry['best']} "
-                    f"({entry['eval']})"
-                )
-    else:
-        st.markdown('<div class="analysis-card">', unsafe_allow_html=True)
-        st.caption("Joue un coup pour voir l'analyse apparaître ici.")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-with right_col:
-    st.markdown("# ♞ Chess Trainer")
-    st.markdown('<p class="subtitle">Clique sur une pièce, puis sur sa case de destination</p>', unsafe_allow_html=True)
-
-    if board.is_checkmate():
-        st.success("Échec et mat !")
-    elif board.is_stalemate():
-        st.info("Pat (match nul).")
-    elif board.is_check():
-        st.warning("Échec !")
-
-    board_image = render_board_image()
-    click_value = streamlit_image_coordinates(board_image, key="board_click")
-
-    if click_value is not None:
-        click_time = click_value.get("unix_time")
-        if click_time != st.session_state.last_click_time:
-            st.session_state.last_click_time = click_time
-            square = pixel_to_square(click_value["x"], click_value["y"])
-            handle_square_click(square)
-            st.rerun()
-
-    st.write("")
-    if st.button("🔄 Nouvelle partie"):
-        st.session_state.board = chess.Board()
-        st.session_state.selected_square = None
-        st.session_state.analysis_log = []
-        st.session_state.last_click_time = None
-        st.rerun()
