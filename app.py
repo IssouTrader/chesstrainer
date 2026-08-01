@@ -209,11 +209,10 @@ with right_col:
         st.warning("Échec !")
 
     board_image = render_board_image()
-    click_value = streamlit_image_coordinates(board_image, key="board_click")
-    st.write("DEBUG clic:", click_value)
+click_value = streamlit_image_coordinates(board_image, key="board_click")
 
     if click_value is not None:
-        click_time = click_value.get("time")
+        click_time = click_value.get("unix_time")
         if click_time != st.session_state.last_click_time:
             st.session_state.last_click_time = click_time
             square = pixel_to_square(click_value["x"], click_value["y"])
