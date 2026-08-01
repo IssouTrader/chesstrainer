@@ -210,6 +210,7 @@ with right_col:
 
     board_image = render_board_image()
     click_value = streamlit_image_coordinates(board_image, key="board_click")
+    st.write("DEBUG clic:", click_value)
 
     if click_value is not None:
         click_time = click_value.get("time")
