@@ -1,6 +1,5 @@
 import streamlit as st
 import chess
-import chess.svg
 import chess.engine
 import shutil
 import os
@@ -21,9 +20,17 @@ def find_stockfish():
 
 STOCKFISH_PATH = find_stockfish()
 
-# --- Initialisation de l'état du jeu ---
+# --- Symboles unicode des pièces ---
+PIECE_UNICODE = {
+    "P": "♙", "N": "♘", "B": "♗", "R": "♖", "Q": "♕", "K": "♔",
+    "p": "♟", "n": "♞", "b": "♝", "r": "♜", "q": "♛", "k": "♚",
+}
+
+# --- Initialisation de l'état ---
 if "board" not in st.session_state:
     st.session_state.board = chess.Board()
+if "selected_square" not in st.session_state:
+    st.session_state.selected_square = None
 
 board = st.session_state.board
 
@@ -32,14 +39,9 @@ st.title("♞ Chess Trainer")
 if STOCKFISH_PATH is None:
     st.error(
         "Stockfish n'a pas été trouvé sur le serveur. "
-        "Vérifie que le fichier packages.txt contient bien 'stockfish' "
-        "et que le déploiement a bien réinstallé les paquets système."
+        "Vérifie que le fichier packages.txt contient bien 'stockfish'."
     )
     st.stop()
-
-# --- Affichage de l'échiquier ---
-board_svg = chess.svg.board(board=board, size=400)
-st.markdown(f'<div style="display:flex; justify-content:center;">{board_svg}</div>', unsafe_allow_html=True)
 
 # --- Statut de la partie ---
 if board.is_checkmate():
@@ -49,30 +51,85 @@ elif board.is_stalemate():
 elif board.is_check():
     st.warning("Échec !")
 
-# --- Choix et jeu du coup ---
-if not board.is_game_over():
-    legal_moves = list(board.legal_moves)
-    move_labels = [board.san(m) for m in legal_moves]
-    move_map = dict(zip(move_labels, legal_moves))
+st.caption("Clique sur une pièce, puis sur la case où tu veux la déplacer.")
 
-    chosen_label = st.selectbox("Choisis ton coup :", sorted(move_labels))
 
-    if st.button("Jouer ce coup"):
-        move = move_map[chosen_label]
+def square_label(square):
+    """Retourne le texte affiché sur le bouton d'une case."""
+    piece = board.piece_at(square)
+    piece_str = PIECE_UNICODE.get(piece.symbol(), " ") if piece else " "
+
+    is_selected = st.session_state.selected_square == square
+    is_legal_target = False
+    if st.session_state.selected_square is not None:
+        move = chess.Move(st.session_state.selected_square, square)
+        if move in board.legal_moves or _with_queen_promotion(move) in board.legal_moves:
+            is_legal_target = True
+
+    if is_selected:
+        return f"🔵{piece_str}"
+    if is_legal_target:
+        return f"·{piece_str}·" if piece else "•"
+    return piece_str
+
+
+def _with_queen_promotion(move):
+    return chess.Move(move.from_square, move.to_square, promotion=chess.QUEEN)
+
+
+def handle_click(square):
+    selected = st.session_state.selected_square
+    clicked_piece = board.piece_at(square)
+
+    if selected is None:
+        if clicked_piece and clicked_piece.color == board.turn:
+            st.session_state.selected_square = square
+        return
+
+    if square == selected:
+        st.session_state.selected_square = None
+        return
+
+    move = chess.Move(selected, square)
+    promo_move = _with_queen_promotion(move)
+
+    if move in board.legal_moves:
         board.push(move)
-        st.session_state.board = board
+        st.session_state.selected_square = None
+        play_stockfish_reply()
+        return
+    elif promo_move in board.legal_moves:
+        board.push(promo_move)
+        st.session_state.selected_square = None
+        play_stockfish_reply()
+        return
 
-        # Réponse de Stockfish si la partie n'est pas terminée
-        if not board.is_game_over():
-            with st.spinner("Stockfish réfléchit..."):
-                with chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH) as engine:
-                    result = engine.play(board, chess.engine.Limit(time=1.0))
-                    board.push(result.move)
-                    st.session_state.board = board
+    if clicked_piece and clicked_piece.color == board.turn:
+        st.session_state.selected_square = square
+    else:
+        st.session_state.selected_square = None
 
-        st.rerun()
+
+def play_stockfish_reply():
+    if board.is_game_over():
+        return
+    with chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH) as engine:
+        result = engine.play(board, chess.engine.Limit(time=2.0))
+        board.push(result.move)
+
+
+# --- Affichage de l'échiquier (rangée 8 en haut, rangée 1 en bas) ---
+for rank in range(7, -1, -1):
+    cols = st.columns(8)
+    for file in range(8):
+        square = chess.square(file, rank)
+        with cols[file]:
+            if st.button(square_label(square), key=f"sq_{square}", use_container_width=True):
+                handle_click(square)
+                st.rerun()
 
 # --- Nouvelle partie ---
 if st.button("Nouvelle partie"):
     st.session_state.board = chess.Board()
+    st.session_state.selected_square = None
     st.rerun()
