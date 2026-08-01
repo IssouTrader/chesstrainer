@@ -36,14 +36,56 @@ STOCKFISH_PATH = find_stockfish()
 
 @st.cache_resource
 def get_engine():
-    """Ouvre Stockfish UNE SEULE FOIS et le garde actif entre les coups (au lieu de le relancer à chaque fois)."""
     return chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH)
 
 
 @st.cache_resource
 def get_engine_lock():
-    """Évite que deux coups soient envoyés au moteur en même temps si plusieurs personnes utilisent l'app."""
     return threading.Lock()
+
+
+# --- Base d'ouvertures (liste large mais non exhaustive, en notation UCI) ---
+OPENINGS = [
+    {"name": "Ruy Lopez (Espagnole)", "moves": ["e2e4", "e7e5", "g1f3", "b8c6", "f1b5"]},
+    {"name": "Ruy Lopez : Défense Berlinoise", "moves": ["e2e4", "e7e5", "g1f3", "b8c6", "f1b5", "g8f6"]},
+    {"name": "Partie Italienne", "moves": ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4"]},
+    {"name": "Giuoco Piano", "moves": ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "f8c5"]},
+    {"name": "Partie Écossaise", "moves": ["e2e4", "e7e5", "g1f3", "b8c6", "d2d4"]},
+    {"name": "Défense Petrov", "moves": ["e2e4", "e7e5", "g1f3", "g8f6"]},
+    {"name": "Défense Philidor", "moves": ["e2e4", "e7e5", "g1f3", "d7d6"]},
+    {"name": "Partie des Quatre Cavaliers", "moves": ["e2e4", "e7e5", "g1f3", "b8c6", "b1c3", "g8f6"]},
+    {"name": "Partie du Centre", "moves": ["e2e4", "e7e5", "d2d4"]},
+    {"name": "Partie Viennoise", "moves": ["e2e4", "e7e5", "b1c3"]},
+    {"name": "Gambit Roi", "moves": ["e2e4", "e7e5", "f2f4"]},
+    {"name": "Gambit Roi accepté", "moves": ["e2e4", "e7e5", "f2f4", "e5f4"]},
+    {"name": "Défense Sicilienne", "moves": ["e2e4", "c7c5"]},
+    {"name": "Sicilienne Najdorf", "moves": ["e2e4", "c7c5", "g1f3", "d7d6", "d2d4", "c5d4", "f3d4", "g8f6", "b1c3", "a7a6"]},
+    {"name": "Sicilienne Dragon", "moves": ["e2e4", "c7c5", "g1f3", "d7d6", "d2d4", "c5d4", "f3d4", "g8f6", "b1c3", "g7g6"]},
+    {"name": "Sicilienne Sveshnikov", "moves": ["e2e4", "c7c5", "g1f3", "b8c6", "d2d4", "c5d4", "f3d4", "g8f6", "b1c3", "e7e5"]},
+    {"name": "Défense Française", "moves": ["e2e4", "e7e6"]},
+    {"name": "Défense Caro-Kann", "moves": ["e2e4", "c7c6"]},
+    {"name": "Défense Pirc", "moves": ["e2e4", "d7d6"]},
+    {"name": "Défense Scandinave", "moves": ["e2e4", "d7d5"]},
+    {"name": "Défense Alekhine", "moves": ["e2e4", "g8f6"]},
+    {"name": "Gambit Dame", "moves": ["d2d4", "d7d5", "c2c4"]},
+    {"name": "Gambit Dame refusé", "moves": ["d2d4", "d7d5", "c2c4", "e7e6"]},
+    {"name": "Gambit Dame accepté", "moves": ["d2d4", "d7d5", "c2c4", "d5c4"]},
+    {"name": "Défense Slave", "moves": ["d2d4", "d7d5", "c2c4", "c7c6"]},
+    {"name": "Défense Est-Indienne", "moves": ["d2d4", "g8f6", "c2c4", "g7g6"]},
+    {"name": "Défense Grünfeld", "moves": ["d2d4", "g8f6", "c2c4", "g7g6", "b1c3", "d7d5"]},
+    {"name": "Défense Nimzo-Indienne", "moves": ["d2d4", "g8f6", "c2c4", "e7e6", "b1c3", "f8b4"]},
+    {"name": "Défense Ouest-Indienne", "moves": ["d2d4", "g8f6", "c2c4", "e7e6", "g1f3", "b7b6"]},
+    {"name": "Défense Bogo-Indienne", "moves": ["d2d4", "g8f6", "c2c4", "e7e6", "g1f3", "f8b4"]},
+    {"name": "Ouverture Catalane", "moves": ["d2d4", "g8f6", "c2c4", "e7e6", "g2g3"]},
+    {"name": "Défense Benoni", "moves": ["d2d4", "g8f6", "c2c4", "c7c5"]},
+    {"name": "Défense Hollandaise", "moves": ["d2d4", "f7f5"]},
+    {"name": "Système Londres", "moves": ["d2d4", "d7d5", "g1f3", "g8f6", "c1f4"]},
+    {"name": "Système Colle", "moves": ["d2d4", "d7d5", "g1f3", "g8f6", "e2e3"]},
+    {"name": "Attaque Trompowsky", "moves": ["d2d4", "g8f6", "c1g5"]},
+    {"name": "Ouverture Anglaise", "moves": ["c2c4"]},
+    {"name": "Ouverture Réti", "moves": ["g1f3", "d7d5", "c2c4"]},
+    {"name": "Ouverture Bird", "moves": ["f2f4"]},
+]
 
 
 st.markdown("""
@@ -55,6 +97,13 @@ st.markdown("""
         border: 1px solid #2e323c;
         border-radius: 10px;
         padding: 18px;
+        margin-bottom: 12px;
+    }
+    .opening-current {
+        background-color: #1c1f26;
+        border: 1px solid #d4a017;
+        border-radius: 10px;
+        padding: 14px;
         margin-bottom: 12px;
     }
 </style>
@@ -175,6 +224,18 @@ def process_human_move(move):
             board.push(result.move)
 
 
+def undo_last_round():
+    """Annule le dernier coup joué et la réponse de Stockfish qui a suivi."""
+    if len(board.move_stack) >= 2:
+        board.pop()
+        board.pop()
+    elif len(board.move_stack) == 1:
+        board.pop()
+    if st.session_state.analysis_log:
+        st.session_state.analysis_log.pop(0)
+    st.session_state.selected_square = None
+
+
 def pixel_to_square(x, y):
     file = int(x // SQUARE_SIZE)
     rank = 7 - int(y // SQUARE_SIZE)
@@ -253,7 +314,24 @@ def render_board_image():
     return add_coordinate_labels(img)
 
 
-left_col, right_col = st.columns([1, 2], gap="large")
+def get_opening_status():
+    played = [m.uci() for m in board.move_stack]
+    reached = [
+        op for op in OPENINGS
+        if len(op["moves"]) <= len(played) and op["moves"] == played[:len(op["moves"])]
+    ]
+    current = max(reached, key=lambda o: len(o["moves"])) if reached else None
+
+    in_progress = [
+        op for op in OPENINGS
+        if len(op["moves"]) > len(played) and op["moves"][:len(played)] == played
+    ]
+    in_progress.sort(key=lambda o: len(o["moves"]))
+    return current, in_progress
+
+
+# --- Mise en page : Trainer | Échiquier | Ouvertures ---
+left_col, board_col, opening_col = st.columns([1, 2, 1], gap="large")
 
 with left_col:
     st.markdown("## 🎓 Trainer")
@@ -285,7 +363,7 @@ with left_col:
         st.caption("Joue un coup pour voir l'analyse apparaître ici.")
         st.markdown('</div>', unsafe_allow_html=True)
 
-with right_col:
+with board_col:
     st.markdown("# ♞ Chess Trainer")
     st.markdown('<p class="subtitle">Clique sur une pièce, puis sur sa case de destination</p>', unsafe_allow_html=True)
 
@@ -308,9 +386,35 @@ with right_col:
             st.rerun()
 
     st.write("")
-    if st.button("🔄 Nouvelle partie"):
-        st.session_state.board = chess.Board()
-        st.session_state.selected_square = None
-        st.session_state.analysis_log = []
-        st.session_state.last_click_time = None
-        st.rerun()
+    btn_col1, btn_col2 = st.columns(2)
+    with btn_col1:
+        if st.button("↩️ Annuler le dernier coup", use_container_width=True):
+            undo_last_round()
+            st.rerun()
+    with btn_col2:
+        if st.button("🔄 Nouvelle partie", use_container_width=True):
+            st.session_state.board = chess.Board()
+            st.session_state.selected_square = None
+            st.session_state.analysis_log = []
+            st.session_state.last_click_time = None
+            st.rerun()
+
+with opening_col:
+    st.markdown("## 📖 Ouverture")
+    current, in_progress = get_opening_status()
+
+    if current:
+        st.markdown(
+            f'<div class="opening-current">🎯 <strong>{current["name"]}</strong></div>',
+            unsafe_allow_html=True,
+        )
+    elif len(board.move_stack) == 0:
+        st.caption("La partie n'a pas encore commencé.")
+    else:
+        st.caption("Position en dehors des ouvertures répertoriées.")
+
+    if in_progress:
+        with st.expander("Encore possibles"):
+            for op in in_progress[:15]:
+                st.write(f"• {op['name']}")
+</parameter>
