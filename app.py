@@ -6,13 +6,14 @@ import cairosvg
 import shutil
 import os
 import io
+import threading
 from PIL import Image, ImageDraw
 from streamlit_image_coordinates import streamlit_image_coordinates
 
 st.set_page_config(page_title="Chess Trainer", page_icon="♞", layout="wide")
 
-ANALYSIS_TIME = 1.0
-REPLY_TIME = 2.0
+ANALYSIS_TIME = 0.6
+REPLY_TIME = 1.2
 BOARD_SIZE = 480
 SQUARE_SIZE = BOARD_SIZE / 8
 LABEL_COLOR = "#3b2a1a"
@@ -31,6 +32,19 @@ def find_stockfish():
 
 
 STOCKFISH_PATH = find_stockfish()
+
+
+@st.cache_resource
+def get_engine():
+    """Ouvre Stockfish UNE SEULE FOIS et le garde actif entre les coups (au lieu de le relancer à chaque fois)."""
+    return chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH)
+
+
+@st.cache_resource
+def get_engine_lock():
+    """Évite que deux coups soient envoyés au moteur en même temps si plusieurs personnes utilisent l'app."""
+    return threading.Lock()
+
 
 st.markdown("""
 <style>
@@ -131,7 +145,10 @@ def process_human_move(move):
     move_number = board.fullmove_number
     side_played = "Blancs" if board.turn == chess.WHITE else "Noirs"
 
-    with chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH) as engine:
+    engine = get_engine()
+    lock = get_engine_lock()
+
+    with lock:
         info = engine.analyse(board, chess.engine.Limit(time=ANALYSIS_TIME))
         best_move = info["pv"][0]
         best_san = board.san(best_move)
