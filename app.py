@@ -209,7 +209,7 @@ with right_col:
         st.warning("Échec !")
 
     board_image = render_board_image()
-click_value = streamlit_image_coordinates(board_image, key="board_click")
+    click_value = streamlit_image_coordinates(board_image, key="board_click")
 
     if click_value is not None:
         click_time = click_value.get("unix_time")
